@@ -122,46 +122,12 @@ Express Server
 ```
 
 ### 3. POST /apply-sales-tax
-**Purpose**: Calculate and apply sales tax based on zip code
+**Purpose**: Calculate and apply sales tax based on zip code and price
 
 **Request Body**:
 ```json
 {
-  "zipCode": "10001",
-  "programId": "prog_001",
-  "promoCode": "SAVE20" // optional
-}
-```
-
-**Response Format**:
-```json
-{
-  "success": true,
-  "data": {
-    "id": "prog_001",
-    "name": "Web Development Bootcamp",
-    "basePrice": 299.99,
-    "taxRate": 0.08,
-    "taxAmount": 23.99,
-    "discountAmount": 36.00,
-    "finalPrice": 287.99
-  }
-}
-```
-
-**Business Logic**:
-- Tax rates vary by zip code (generated mock data, just return the last numerical digit of the zip code as the tax rate, converted to percentage)
-- Tax is calculated on discounted price if promo code exists
-- Return updated program object with tax calculations
-
-### 4. POST /apply-promo-code
-**Purpose**: Apply promotional discount to program
-
-**Request Body**:
-```json
-{
-  "promoCode": "SAVE20",
-  "programId": "prog_001",
+  "price": 299.99,
   "zipCode": "10001"
 }
 ```
@@ -171,22 +137,55 @@ Express Server
 {
   "success": true,
   "data": {
-    "id": "prog_001",
-    "name": "Web Development Bootcamp",
-    "basePrice": 299.99,
+    "originalPrice": 299.99,
     "taxRate": 0.08,
     "taxAmount": 23.99,
-    "discountAmount": 36.00,
-    "finalPrice": 287.99
+    "newPrice": 323.98
+  }
+}
+```
+
+**Business Logic**:
+- Tax rates vary by zip code (generated mock data, just return the last numerical digit of the zip code as the tax rate, converted to percentage)
+- Return the new price after tax calculation
+
+### 4. POST /validate-promo-code
+**Purpose**: Validate promotional discount code
+
+**Request Body**:
+```json
+{
+  "promoCode": "SAVE20"
+}
+```
+
+**Response Format**:
+```json
+{
+  "success": true,
+  "data": {
+    "code": "SAVE20",
+    "discountType": "percentage",
+    "discountValue": 0.20,
+    "isValid": true
   }
 }
 ```
 
 **Business Logic**:
 - Validate promo code against mock database
-- Apply discount percentage or fixed amount
-- Recalculate tax if zip code exists
-- Return updated program object with discount applied
+- Return promo code details if valid
+- Return error if invalid
+
+## Frontend Business Logic (Hardcoded)
+
+The frontend will handle the sequence of applying discounts and taxes in a hardcoded manner:
+
+1. **Discount First**: Always apply promo code discount to base price first
+2. **Tax Second**: Always apply tax to the discounted price
+3. **Calculation Order**: Base Price → Discount → Tax → Final Price
+
+This logic is hardcoded in the frontend and cannot be changed without modifying the frontend code.
 
 ## Mock Database Structure
 
@@ -240,7 +239,7 @@ Don't use a table, just pick the last digit of the postal/zip code and return th
 3. **Promo Code Input**
    - Text input with placeholder "Enter promo code"
    - Apply button
-   - AJAX call to `/apply-promo-code` on button click
+   - AJAX call to `/validate-promo-code` on button click
 
 4. **Price Breakdown**
    - Subtotal (base price)
@@ -255,7 +254,7 @@ Don't use a table, just pick the last digit of the postal/zip code and return th
 
 ### Real-time Updates
 - **Zip Code Changes**: Immediately call `/apply-sales-tax` and update display
-- **Promo Code Application**: Call `/apply-promo-code` and update display
+- **Promo Code Application**: Call `/validate-promo-code` and update display
 - **Program Selection**: Reset all calculations to base price
 - **Error Handling**: Display user-friendly error messages for invalid inputs
 
@@ -278,20 +277,14 @@ Don't use a table, just pick the last digit of the postal/zip code and return th
 
 #### Tax Calculation Service
 - Lookup tax rate by zip code
-- Calculate tax on appropriate base (original or discounted)
-- Handle invalid zip codes gracefully
+- Calculate tax on the provided price
+- Return new price with tax applied
 
 #### Promo Code Service
 - Validate promo code exists and is active
 - Check usage limits
-- Apply percentage or fixed discounts
-- Handle invalid/expired codes
+- Return promo code details for frontend calculation
 
-#### Price Calculation Service
-- Calculate final price after all modifications
-- Ensure prices never go below zero
-- Apply discounts before tax calculations
-- Round all monetary values to 2 decimal places
 
 ### Error Handling
 - Invalid program IDs: 404 with descriptive message
@@ -336,5 +329,6 @@ Don't use a table, just pick the last digit of the postal/zip code and return th
 - [ ] Error handling works for invalid inputs
 - [ ] Code is well-structured and commented
 - [ ] Application handles edge cases gracefully
+- [ ] Frontend hardcodes the discount-then-tax calculation sequence
 
 This specification provides a comprehensive foundation for building an educational application that demonstrates modern web development concepts while maintaining simplicity for learning purposes.

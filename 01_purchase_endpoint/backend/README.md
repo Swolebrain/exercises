@@ -6,7 +6,7 @@ This is the backend server for the Program Purchase Application, built with Node
 
 - **RESTful API** with 4 endpoints as specified
 - **Mock Database** using in-memory arrays
-- **Business Logic Services** for tax calculation, promo code validation, and price calculation
+- **Simplified Business Logic** - frontend handles complex calculations
 - **Repository Pattern** for data access
 - **TypeScript** for type safety
 - **Error Handling** with proper HTTP status codes
@@ -20,10 +20,51 @@ Retrieves all available programs for purchase.
 Processes a program purchase with customer information.
 
 ### 3. POST /apply-sales-tax
-Calculates and applies sales tax based on ZIP code.
+Calculates and applies sales tax based on price and ZIP code.
 
-### 4. POST /apply-promo-code
-Applies promotional discounts to programs.
+**Request Body**:
+```json
+{
+  "price": 299.99,
+  "zipCode": "10001"
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "originalPrice": 299.99,
+    "taxRate": 0.08,
+    "taxAmount": 23.99,
+    "newPrice": 323.98
+  }
+}
+```
+
+### 4. POST /validate-promo-code
+Validates promotional discount codes.
+
+**Request Body**:
+```json
+{
+  "promoCode": "SAVE20"
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "code": "SAVE20",
+    "discountType": "percentage",
+    "discountValue": 0.20,
+    "isValid": true
+  }
+}
+```
 
 ## Installation
 
@@ -64,7 +105,7 @@ src/
 ├── controllers/     # API endpoint handlers
 ├── models/         # Data models and mock data
 ├── repositories/   # Data access layer
-├── services/       # Business logic
+├── services/       # Simplified business logic
 └── index.ts        # Server entry point
 ```
 
@@ -76,10 +117,16 @@ src/
 
 ## Business Logic
 
-- Tax is calculated on the discounted price if a promo code is applied
-- Promo codes are validated for expiration and usage limits
-- All monetary values are rounded to 2 decimal places
-- Discounts cannot exceed the base price
+**Note**: This backend is intentionally simplified for educational purposes. The frontend now handles the complex business logic including:
+- Discount application sequence
+- Tax calculation on discounted prices
+- Final price calculations
+
+The backend only:
+- Provides tax rates based on ZIP codes
+- Validates promo codes
+- Stores program data
+- Processes purchases
 
 ## Testing
 
@@ -92,10 +139,10 @@ curl http://localhost:3000/list-programs
 # Apply sales tax
 curl -X POST http://localhost:3000/apply-sales-tax \
   -H "Content-Type: application/json" \
-  -d '{"zipCode":"12345","programId":"prog_001"}'
+  -d '{"price":99.99,"zipCode":"12345"}'
 
-# Apply promo code
-curl -X POST http://localhost:3000/apply-promo-code \
+# Validate promo code
+curl -X POST http://localhost:3000/validate-promo-code \
   -H "Content-Type: application/json" \
-  -d '{"promoCode":"SAVE20","programId":"prog_001"}'
+  -d '{"promoCode":"SAVE20"}'
 ```

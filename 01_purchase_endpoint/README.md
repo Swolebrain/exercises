@@ -10,6 +10,7 @@ A complete full-stack web application demonstrating frontend-backend integration
 - **Mock Database**: In-memory data storage for demonstration
 - **Responsive Design**: Works on all device sizes
 - **Type Safety**: Full TypeScript implementation
+- **Hardcoded Business Logic**: Frontend handles discount and tax calculation sequence
 
 ## 📁 Project Structure
 
@@ -20,14 +21,14 @@ A complete full-stack web application demonstrating frontend-backend integration
 │   │   ├── controllers/    # API endpoint handlers
 │   │   ├── models/         # Data models and mock data
 │   │   ├── repositories/   # Data access layer
-│   │   ├── services/       # Business logic
+│   │   ├── services/       # Simplified business logic
 │   │   └── index.ts        # Server entry point
 │   ├── package.json
 │   └── README.md
 ├── frontend/                # React + TypeScript frontend with Vite
 │   ├── src/
 │   │   ├── components/     # React components
-│   │   ├── services/       # API service layer
+│   │   ├── services/       # API service layer + PriceCalculationService
 │   │   ├── types/          # TypeScript type definitions
 │   │   ├── App.tsx         # Main application component
 │   │   └── index.tsx       # Application entry point
@@ -72,8 +73,8 @@ The frontend will open in your browser at `http://localhost:5173` (Vite's defaul
 |--------|----------|-------------|
 | GET | `/list-programs` | Get all available programs |
 | POST | `/purchase-program` | Process program purchase |
-| POST | `/apply-sales-tax` | Calculate tax based on ZIP code |
-| POST | `/apply-promo-code` | Apply promotional discount |
+| POST | `/apply-sales-tax` | Calculate tax based on price and ZIP code |
+| POST | `/validate-promo-code` | Validate promotional discount code |
 
 ## 💰 How It Works
 
@@ -96,6 +97,18 @@ This application demonstrates:
 - **Type Safety**: TypeScript interfaces and type checking
 - **Code Organization**: Separation of concerns with controllers, services, and repositories
 - **Modern Build Tools**: Vite for fast development and building
+- **Architectural Patterns**: What NOT to do (hardcoding business logic in frontend)
+
+## 🏗️ Architecture Notes
+
+**Intentional "Worse" Design**: This application is designed to demonstrate what NOT to do in production:
+
+- **Frontend Business Logic**: The sequence of applying discounts and taxes is hardcoded in the frontend
+- **Tight Coupling**: Frontend and backend are tightly coupled through hardcoded calculation sequences
+- **Limited Flexibility**: Business rules cannot be changed without modifying frontend code
+- **Testing Complexity**: Business logic is harder to test when embedded in UI components
+
+This serves as a valuable learning tool to understand why business logic should typically be centralized in the backend.
 
 ## 🧪 Testing the Application
 
@@ -107,7 +120,7 @@ This application demonstrates:
 - Any 5-digit ZIP code (last digit becomes tax rate percentage)
 - Example: `12345` = 5% tax, `90210` = 0% tax
 
-## 📱 Responsive Design
+## �� Responsive Design
 
 The application is fully responsive and works on:
 - Desktop computers
@@ -157,6 +170,7 @@ This application covers:
 - State management patterns
 - CSS styling and responsive design
 - Vite build tooling and configuration
+- **Anti-patterns**: What to avoid in production applications
 
 ## 🤝 Contributing
 
@@ -166,6 +180,7 @@ This is an educational project. Feel free to:
 - Improve the UI/UX
 - Enhance the business logic
 - Add tests and validation
+- **Refactor**: Move business logic to the backend for better architecture
 
 ## 📄 License
 

@@ -16,7 +16,7 @@ const programsController = new ProgramsController();
 app.get('/list-programs', programsController.listPrograms);
 app.post('/purchase-program', programsController.purchaseProgram);
 app.post('/apply-sales-tax', programsController.applySalesTax);
-app.post('/apply-promo-code', programsController.applyPromoCode);
+app.post('/validate-promo-code', programsController.validatePromoCode);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -48,5 +48,5 @@ app.listen(PORT, () => {
     console.log(`  GET  /list-programs`);
     console.log(`  POST /purchase-program`);
     console.log(`  POST /apply-sales-tax`);
-    console.log(`  POST /apply-promo-code`);
+    console.log(`  POST /validate-promo-code`);
 });

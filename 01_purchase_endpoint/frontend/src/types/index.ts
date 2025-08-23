@@ -32,7 +32,7 @@ export interface PurchaseRequest {
 
 export interface PurchaseResponse {
     orderId: string;
-    program: ProgramWithCalculations;
+    program: Program;
     total: number;
     timestamp: string;
 }
@@ -44,13 +44,24 @@ export interface ApiResponse<T> {
 }
 
 export interface TaxRequest {
+    price: number;
     zipCode: string;
-    programId: string;
-    promoCode?: string;
 }
 
-export interface PromoCodeRequest {
+export interface TaxResponse {
+    originalPrice: number;
+    taxRate: number;
+    taxAmount: number;
+    newPrice: number;
+}
+
+export interface PromoCodeValidationRequest {
     promoCode: string;
-    programId: string;
-    zipCode?: string;
+}
+
+export interface PromoCodeValidation {
+    code: string;
+    discountType: "percentage" | "fixed";
+    discountValue: number;
+    isValid: boolean;
 }

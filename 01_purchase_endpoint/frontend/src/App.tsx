@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Program, ProgramWithCalculations, CustomerInfo } from './types';
+import { Program, CustomerInfo, TaxResponse, PromoCodeValidation } from './types';
 import { apiService } from './services/api';
+import { PriceCalculationService, CalculatedPrice } from './services/PriceCalculationService';
 import { ProgramSelection } from './components/ProgramSelection';
 import { BillingAddress } from './components/BillingAddress';
 import { PromoCodeInput } from './components/PromoCodeInput';
@@ -26,7 +27,12 @@ function App() {
     const [selectedProgramId, setSelectedProgramId] = useState<string>('');
     const [customerInfo, setCustomerInfo] = useState<CustomerInfo>(initialCustomerInfo);
     const [promoCode, setPromoCode] = useState<string>('');
-    const [currentProgram, setCurrentProgram] = useState<ProgramWithCalculations | null>(null);
+    const [currentProgram, setCurrentProgram] = useState<Program | null>(null);
+    
+    // New state for the "worse" architecture
+    const [promoCodeValidation, setPromoCodeValidation] = useState<PromoCodeValidation | null>(null);
+    const [taxResponse, setTaxResponse] = useState<TaxResponse | null>(null);
+    const [calculatedPrice, setCalculatedPrice] = useState<CalculatedPrice | null>(null);
     
     // Loading and error states
     const [isLoadingPrograms, setIsLoadingPrograms] = useState(true);
@@ -35,10 +41,20 @@ function App() {
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
 
+    // Initialize price calculation service
+    const priceCalculationService = new PriceCalculationService();
+
     // Load programs on component mount
     useEffect(() => {
         loadPrograms();
     }, []);
+
+    // Recalculate price whenever relevant data changes
+    useEffect(() => {
+        if (currentProgram) {
+            recalculatePrice();
+        }
+    }, [currentProgram, promoCodeValidation, taxResponse]);
 
     // Load programs from backend
     const loadPrograms = async () => {
@@ -65,6 +81,9 @@ function App() {
         if (program) {
             // Reset calculations when program changes
             setCurrentProgram(program);
+            setPromoCodeValidation(null);
+            setTaxResponse(null);
+            setCalculatedPrice(null);
             setError(null);
             setSuccess(null);
         }
@@ -75,27 +94,24 @@ function App() {
         setCustomerInfo(newCustomerInfo);
         
         // Auto-apply tax when zip code changes
-        if (newCustomerInfo.billingAddress.zipCode.length === 5 && selectedProgramId) {
-            applySalesTax(newCustomerInfo.billingAddress.zipCode);
+        if (newCustomerInfo.billingAddress.zipCode.length === 5 && currentProgram) {
+            applySalesTax(currentProgram.basePrice, newCustomerInfo.billingAddress.zipCode);
         }
-    }, [selectedProgramId]);
+    }, [currentProgram]);
 
-    // Apply sales tax
-    const applySalesTax = async (zipCode: string) => {
-        if (!selectedProgramId) return;
-        
+    // Apply sales tax using the new API
+    const applySalesTax = async (price: number, zipCode: string) => {
         try {
             setIsLoadingCalculations(true);
             setError(null);
             
             const request = {
-                zipCode,
-                programId: selectedProgramId,
-                promoCode: promoCode || undefined
+                price,
+                zipCode
             };
             
-            const updatedProgram = await apiService.applySalesTax(request);
-            setCurrentProgram(updatedProgram);
+            const response = await apiService.applySalesTax(request);
+            setTaxResponse(response);
         } catch (err) {
             setError('Failed to calculate tax');
             console.error('Error applying sales tax:', err);
@@ -104,29 +120,40 @@ function App() {
         }
     };
 
-    // Apply promo code
-    const handleApplyPromoCode = async () => {
-        if (!selectedProgramId || !promoCode.trim()) return;
+    // Validate promo code using the new API
+    const handleValidatePromoCode = async () => {
+        if (!promoCode.trim()) return;
         
         try {
             setIsLoadingCalculations(true);
             setError(null);
             
             const request = {
-                promoCode: promoCode.trim(),
-                programId: selectedProgramId,
-                zipCode: customerInfo.billingAddress.zipCode || undefined
+                promoCode: promoCode.trim()
             };
             
-            const updatedProgram = await apiService.applyPromoCode(request);
-            setCurrentProgram(updatedProgram);
-            setSuccess('Promo code applied successfully!');
+            const response = await apiService.validatePromoCode(request);
+            setPromoCodeValidation(response);
+            setSuccess('Promo code validated successfully!');
         } catch (err) {
             setError('Invalid promo code');
-            console.error('Error applying promo code:', err);
+            console.error('Error validating promo code:', err);
         } finally {
             setIsLoadingCalculations(false);
         }
+    };
+
+    // Recalculate price using hardcoded business logic
+    const recalculatePrice = () => {
+        if (!currentProgram) return;
+        
+        const calculated = priceCalculationService.calculatePrice(
+            currentProgram,
+            promoCodeValidation,
+            taxResponse
+        );
+        
+        setCalculatedPrice(calculated);
     };
 
     // Handle purchase
@@ -151,6 +178,9 @@ function App() {
             setPromoCode('');
             setCustomerInfo(initialCustomerInfo);
             setCurrentProgram(programs.find(p => p.id === selectedProgramId) || null);
+            setPromoCodeValidation(null);
+            setTaxResponse(null);
+            setCalculatedPrice(null);
         } catch (err) {
             setError('Purchase failed. Please try again.');
             console.error('Error processing purchase:', err);
@@ -201,13 +231,14 @@ function App() {
                 <PromoCodeInput
                     promoCode={promoCode}
                     onPromoCodeChange={setPromoCode}
-                    onApplyPromoCode={handleApplyPromoCode}
+                    onApplyPromoCode={handleValidatePromoCode}
                     isLoading={isLoadingCalculations}
                     error={error}
                 />
                 
                 <PriceDisplay
                     program={currentProgram}
+                    calculatedPrice={calculatedPrice}
                     isLoading={isLoadingCalculations}
                 />
                 

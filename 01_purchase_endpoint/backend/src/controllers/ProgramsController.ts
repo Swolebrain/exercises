@@ -2,19 +2,19 @@ import { Request, Response } from 'express';
 import { ProgramsRepository } from '../repositories/ProgramsRepository';
 import { PromoCodesRepository } from '../repositories/PromoCodesRepository';
 import { TaxRatesRepository } from '../repositories/TaxRatesRepository';
-import { PriceCalculationService } from '../services/PriceCalculationService';
+import { TaxCalculationService } from '../services/TaxCalculationService';
 
 export class ProgramsController {
     private programsRepository: ProgramsRepository;
     private promoCodesRepository: PromoCodesRepository;
     private taxRatesRepository: TaxRatesRepository;
-    private priceCalculationService: PriceCalculationService;
+    private taxCalculationService: TaxCalculationService;
 
     constructor() {
         this.programsRepository = new ProgramsRepository();
         this.promoCodesRepository = new PromoCodesRepository();
         this.taxRatesRepository = new TaxRatesRepository();
-        this.priceCalculationService = new PriceCalculationService();
+        this.taxCalculationService = new TaxCalculationService();
     }
 
     /**
@@ -61,36 +61,29 @@ export class ProgramsController {
                 return;
             }
 
-            // Get promo code if provided
-            let promoCodeObj = undefined;
+            // Validate promo code if provided
             if (promoCode) {
-                promoCodeObj = this.promoCodesRepository.getPromoCodeByCode(promoCode);
-                if (!promoCodeObj || !this.promoCodesRepository.isPromoCodeValid(promoCode)) {
+                if (!this.promoCodesRepository.isPromoCodeValid(promoCode)) {
                     res.status(400).json({
                         success: false,
                         message: "Invalid promo code"
                     });
                     return;
                 }
+                // Increment promo code usage
+                this.promoCodesRepository.incrementUsage(promoCode);
             }
-
-            // Calculate final price
-            const finalProgram = this.priceCalculationService.calculateFinalPrice(program, promoCodeObj);
 
             // Generate order ID
             const orderId = `ord_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-            // Increment promo code usage if used
-            if (promoCodeObj) {
-                this.promoCodesRepository.incrementUsage(promoCode);
-            }
-
+            // Note: Frontend handles all price calculations
             res.json({
                 success: true,
                 data: {
                     orderId,
-                    program: finalProgram,
-                    total: finalProgram.finalPrice,
+                    program: program,
+                    total: program.basePrice, // Frontend will calculate final price
                     timestamp: new Date().toISOString()
                 }
             });
@@ -104,16 +97,16 @@ export class ProgramsController {
 
     /**
      * POST /apply-sales-tax
-     * Calculate and apply sales tax based on zip code
+     * Calculate and apply sales tax based on zip code and price
      */
     applySalesTax = (req: Request, res: Response): void => {
         try {
-            const { zipCode, programId, promoCode } = req.body;
+            const { price, zipCode } = req.body;
 
-            if (!zipCode || !programId) {
+            if (!price || !zipCode) {
                 res.status(400).json({
                     success: false,
-                    message: "ZIP code and program ID are required"
+                    message: "Price and ZIP code are required"
                 });
                 return;
             }
@@ -127,38 +120,15 @@ export class ProgramsController {
                 return;
             }
 
-            // Get program
-            const program = this.programsRepository.getProgramById(programId);
-            if (!program) {
-                res.status(404).json({
-                    success: false,
-                    message: "Program not found"
-                });
-                return;
-            }
-
             // Get tax rate
             const taxRate = this.taxRatesRepository.getTaxRateByZipCode(zipCode);
 
-            // Get promo code if provided
-            let promoCodeObj = undefined;
-            if (promoCode) {
-                promoCodeObj = this.promoCodesRepository.getPromoCodeByCode(promoCode);
-                if (!promoCodeObj || !this.promoCodesRepository.isPromoCodeValid(promoCode)) {
-                    res.status(400).json({
-                        success: false,
-                        message: "Invalid promo code"
-                    });
-                    return;
-                }
-            }
-
-            // Calculate final price with tax
-            const finalProgram = this.priceCalculationService.calculateFinalPrice(program, promoCodeObj, taxRate);
+            // Calculate tax on the provided price
+            const taxResponse = this.taxCalculationService.calculateTaxOnPrice(price, taxRate);
 
             res.json({
                 success: true,
-                data: finalProgram
+                data: taxResponse
             });
         } catch (error) {
             res.status(500).json({
@@ -169,17 +139,17 @@ export class ProgramsController {
     };
 
     /**
-     * POST /apply-promo-code
-     * Apply promotional discount to program
+     * POST /validate-promo-code
+     * Validate promotional discount code
      */
-    applyPromoCode = (req: Request, res: Response): void => {
+    validatePromoCode = (req: Request, res: Response): void => {
         try {
-            const { promoCode, programId, zipCode } = req.body;
+            const { promoCode } = req.body;
 
-            if (!promoCode || !programId) {
+            if (!promoCode) {
                 res.status(400).json({
                     success: false,
-                    message: "Promo code and program ID are required"
+                    message: "Promo code is required"
                 });
                 return;
             }
@@ -193,43 +163,30 @@ export class ProgramsController {
                 return;
             }
 
-            // Get program
-            const program = this.programsRepository.getProgramById(programId);
-            if (!program) {
-                res.status(404).json({
+            // Get promo code object
+            const promoCodeObj = this.promoCodesRepository.getPromoCodeByCode(promoCode);
+
+            if (!promoCodeObj) {
+                res.status(400).json({
                     success: false,
-                    message: "Program not found"
+                    message: "Promo code not found"
                 });
                 return;
             }
 
-            // Get promo code object
-            const promoCodeObj = this.promoCodesRepository.getPromoCodeByCode(promoCode);
-
-            // Get tax rate if zip code provided
-            let taxRate = undefined;
-            if (zipCode) {
-                if (!this.taxRatesRepository.isValidZipCode(zipCode)) {
-                    res.status(400).json({
-                        success: false,
-                        message: "Invalid ZIP code"
-                    });
-                    return;
-                }
-                taxRate = this.taxRatesRepository.getTaxRateByZipCode(zipCode);
-            }
-
-            // Calculate final price with promo code
-            const finalProgram = this.priceCalculationService.calculateFinalPrice(program, promoCodeObj, taxRate);
-
             res.json({
                 success: true,
-                data: finalProgram
+                data: {
+                    code: promoCodeObj.code,
+                    discountType: promoCodeObj.discountType,
+                    discountValue: promoCodeObj.discountValue,
+                    isValid: true
+                }
             });
         } catch (error) {
             res.status(500).json({
                 success: false,
-                message: "Failed to apply promo code"
+                message: "Failed to validate promo code"
             });
         }
     };

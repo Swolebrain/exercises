@@ -1,10 +1,11 @@
 import { 
     Program, 
-    ProgramWithCalculations, 
+    TaxRequest, 
+    TaxResponse, 
+    PromoCodeValidationRequest, 
+    PromoCodeValidation,
     PurchaseRequest, 
     PurchaseResponse, 
-    TaxRequest, 
-    PromoCodeRequest,
     ApiResponse 
 } from '../types';
 
@@ -43,10 +44,10 @@ class ApiService {
     }
 
     /**
-     * Apply sales tax based on zip code
+     * Apply sales tax based on price and zip code
      */
-    async applySalesTax(request: TaxRequest): Promise<ProgramWithCalculations> {
-        const response = await this.makeRequest<ProgramWithCalculations>('/apply-sales-tax', {
+    async applySalesTax(request: TaxRequest): Promise<TaxResponse> {
+        const response = await this.makeRequest<TaxResponse>('/apply-sales-tax', {
             method: 'POST',
             body: JSON.stringify(request),
         });
@@ -54,10 +55,10 @@ class ApiService {
     }
 
     /**
-     * Apply promotional code
+     * Validate promotional code
      */
-    async applyPromoCode(request: PromoCodeRequest): Promise<ProgramWithCalculations> {
-        const response = await this.makeRequest<ProgramWithCalculations>('/apply-promo-code', {
+    async validatePromoCode(request: PromoCodeValidationRequest): Promise<PromoCodeValidation> {
+        const response = await this.makeRequest<PromoCodeValidation>('/validate-promo-code', {
             method: 'POST',
             body: JSON.stringify(request),
         });
