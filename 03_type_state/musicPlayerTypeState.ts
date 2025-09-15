@@ -15,6 +15,7 @@ interface IPlayingMusicPlayer extends IMusicPlayerBase {
     pause(): IPausedMusicPlayer;
     
 };
+
 interface IPausedMusicPlayer extends IMusicPlayerBase {
     readonly _state: 'paused';
     play(): IPlayingMusicPlayer;
