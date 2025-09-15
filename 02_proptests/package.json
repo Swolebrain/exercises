@@ -1,0 +1,17 @@
+{
+  "name": "02_proptests",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "vitest"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "fast-check": "^4.3.0",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}
