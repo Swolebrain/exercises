@@ -3,80 +3,95 @@ import * as fc from 'fast-check';
 
 import { OrderController, OrderDBRecord, OrderLineItem, OrderStatus } from './orders';
 import { OrderRepository } from './order.repository';
-import { IMemoryDb, newDb } from 'pg-mem';
+import Database from 'better-sqlite3';
 
 
 class OrderRepositoryMock implements OrderRepository {
-    private db: IMemoryDb;
-    constructor(db: IMemoryDb) {
+    private db: Database.Database;
+    constructor(db: Database.Database) {
         this.db = db;
-        this.db.public.none(`CREATE TABLE orders (
+        this.db.exec(`CREATE TABLE orders (
             id varchar(64) PRIMARY KEY,
-            customer_id varchar(64),
-            total_price integer,
-            items jsonb,
-            status text,
-            sequence_number integer
+            customerId varchar(64) not null,
+            totalPrice integer not null,
+            items jsonb not null,
+            status text not null,
+            shippedDate text,
+            finalizedDate text
             );`
         );
     }
 
     async getOrderById(orderId: string): Promise<OrderDBRecord | null> {
-        const dbResult = await this.db.public.many(`SELECT * FROM orders WHERE id = '${orderId}'`);
-        if (dbResult.length === 0) {
+        const stmt = this.db.prepare(`SELECT * FROM orders WHERE id = ?`);
+        const dbResult = stmt.get(orderId);
+        if (!dbResult) {
             return null;
         }
-        return {
-            id: dbResult[0].id,
-            customerId: dbResult[0].customer_id,
-            totalPrice: dbResult[0].total_price,
-            items: dbResult[0].items as OrderLineItem[],
-            status: dbResult[0].status,
-        } satisfies OrderDBRecord;
+        return dbResult as OrderDBRecord;
     }
-    async putOrder(order: OrderDBRecord): Promise<void> {
-        await this.db.public.none(
-            `INSERT INTO orders (id, customer_id, total_price, items, status) 
-            VALUES ('${order.id}', '${order.customerId}', ${order.totalPrice}, '${JSON.stringify(order.items)}', '${order.status}');`
+    async updateOrder(order: OrderDBRecord): Promise<void> {
+        const stmt = this.db.prepare(`UPDATE orders 
+            SET customerId = ?, totalPrice = ?, items = ?, status = ?, shippedDate = ?, finalizedDate = ?
+            WHERE id = ?`);
+        stmt.run(
+            order.id,
+            order.customerId,
+            order.totalPrice,
+            JSON.stringify(order.items),
+            order.status,
+            order.shippedDate || null,
+            order.finalizedDate || null
         );
     }
 }
 
 describe('OrderController race condition property test', () => {
     let orderRepo: OrderRepositoryMock;
+    let db: Database.Database;
+    let orderController: OrderController;
     beforeEach(() => {
-        orderRepo = new OrderRepositoryMock(newDb());
+        db = new Database(':memory:');
+        orderRepo = new OrderRepositoryMock(db);
+        orderController = new OrderController(orderRepo);
+    });
+    afterEach(() => {
+        db.close();
     });
 
     test('should not be able to cancel an order that is not pending', async () => {
+        // seed the order, already in processing status
+        await Promise.all(
+            Array(100).fill('').map((_, idx) => {
+                db.prepare(`INSERT INTO orders (id, customerId, totalPrice, items, status) VALUES (?, ?, ?, ?, ?)`).run(
+                    `${idx+1}`,
+                    'c1',
+                    100,
+                    JSON.stringify([{ itemSku: 'i1', name: 'Item 1', price: 100, quantity: 1 }]),
+                    OrderStatus.PROCESSING
+                );
+            })
+        );
+        let currentOrderId = 0;
+        console.log('order seeded');
         await fc.assert(
             fc.asyncProperty(
                 fc.scheduler(),
                 async (s) => {
-                    const orderController = new OrderController(orderRepo);
-                    // seed the order, already in processing status
-                    await orderRepo.putOrder({
-                        id: '1',
-                        customerId: 'c1',
-                        totalPrice: 100,
-                        items: [{ itemSku: 'i1', name: 'Item 1', price: 100, quantity: 1 }],
-                        status: OrderStatus.PROCESSING
-                    });
-                    console.log('order seeded');
-
+                    currentOrderId++;
                     // schedule shipping and cancelling right away, letting fast-check handle interleaving
                     let successCount = 0;
-                    const shipResult = s.schedule(orderController.shipOrder('1'))
+                    const shipResult = s.schedule(orderController.shipOrder(`${currentOrderId}`))
                         .then(sr => {
                             if (sr.result === 'ok') successCount++;
                         })
-                    const cancelResult = s.schedule(orderController.cancelOrder('1'))
+                    const cancelResult = s.schedule(orderController.cancelOrder(`${currentOrderId}`))
                         .then(cr => {
                             if (cr.result === 'ok') successCount++;
                         });
                     await s.waitIdle();
 
-                    const order = await orderController.getOrder('1');
+                    const order = await orderController.getOrder(`${currentOrderId}`);
 
                     // Two approaches to check for race conditions:
                     // 1: check that only one of the two operations succeeded
