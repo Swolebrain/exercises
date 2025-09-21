@@ -1,33 +1,51 @@
 import { describe,  test } from 'vitest';
 import * as fc from 'fast-check';
 
-import { OrderController, OrderRepository, OrderDBRecord, OrderStatus } from './orders';
+import { OrderController, OrderDBRecord, OrderLineItem, OrderStatus } from './orders';
+import { OrderRepository } from './order.repository';
+import { IMemoryDb, newDb } from 'pg-mem';
 
-function wait(ms?: number) {
-    const waitMS = ms ?? 100; //Math.ceil(Math.random() * 80) + 20;
-    return new Promise(resolve => setTimeout(resolve, waitMS));
-}
 
 class OrderRepositoryMock implements OrderRepository {
-    public orders: Map<string, OrderDBRecord> = new Map(); // public for testing purposes
+    private db: IMemoryDb;
+    constructor(db: IMemoryDb) {
+        this.db = db;
+        this.db.public.none(`CREATE TABLE orders (
+            id varchar(64) PRIMARY KEY,
+            customer_id varchar(64),
+            total_price integer,
+            items jsonb,
+            status text,
+            sequence_number integer
+            );`
+        );
+    }
 
     async getOrderById(orderId: string): Promise<OrderDBRecord | null> {
-        await wait(); // simulate db latency
-        if (this.orders.has(orderId)) {
-            return this.orders.get(orderId)!;
+        const dbResult = await this.db.public.many(`SELECT * FROM orders WHERE id = '${orderId}'`);
+        if (dbResult.length === 0) {
+            return null;
         }
-        return null;
+        return {
+            id: dbResult[0].id,
+            customerId: dbResult[0].customer_id,
+            totalPrice: dbResult[0].total_price,
+            items: dbResult[0].items as OrderLineItem[],
+            status: dbResult[0].status,
+        } satisfies OrderDBRecord;
     }
     async putOrder(order: OrderDBRecord): Promise<void> {
-        await wait(); //simulate db latency
-        this.orders.set(order.id, order);
+        await this.db.public.none(
+            `INSERT INTO orders (id, customer_id, total_price, items, status) 
+            VALUES ('${order.id}', '${order.customerId}', ${order.totalPrice}, '${JSON.stringify(order.items)}', '${order.status}');`
+        );
     }
 }
 
 describe('OrderController race condition property test', () => {
-    let db: OrderRepositoryMock;
+    let orderRepo: OrderRepositoryMock;
     beforeEach(() => {
-        db = new OrderRepositoryMock();
+        orderRepo = new OrderRepositoryMock(newDb());
     });
 
     test('should not be able to cancel an order that is not pending', async () => {
@@ -35,22 +53,16 @@ describe('OrderController race condition property test', () => {
             fc.asyncProperty(
                 fc.scheduler(),
                 async (s) => {
-                    const orderController = new OrderController(db);
+                    const orderController = new OrderController(orderRepo);
                     // seed the order, already in processing status
-                    db.orders.set('1', {
+                    await orderRepo.putOrder({
                         id: '1',
                         customerId: 'c1',
                         totalPrice: 100,
-                        items: [
-                            {
-                                itemSku: 'i1',
-                                name: 'Item 1',
-                                price: 100,
-                                quantity: 1
-                            },
-                        ],
+                        items: [{ itemSku: 'i1', name: 'Item 1', price: 100, quantity: 1 }],
                         status: OrderStatus.PROCESSING
                     });
+                    console.log('order seeded');
 
                     // schedule shipping and cancelling right away, letting fast-check handle interleaving
                     let successCount = 0;
